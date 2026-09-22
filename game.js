@@ -227,7 +227,7 @@ function burstParticles(x, y, emoji, count = 8) {
     p.style.left = `${x}px`;
     p.style.top = `${y}px`;
     fxLayer.appendChild(p);
-    setTimeout(() => p.remove(), 650);
+    setTimeout(() => p.remove(), 420);
   }
 }
 
@@ -238,7 +238,32 @@ function floatText(x, y, text) {
   f.style.left = `${x}px`;
   f.style.top = `${y}px`;
   fxLayer.appendChild(f);
-  setTimeout(() => f.remove(), 950);
+  setTimeout(() => f.remove(), 600);
+}
+
+function spawnShockwave(x, y, tier) {
+  const ring = document.createElement('div');
+  ring.className = 'shockwave';
+  const size = 36 + tier * 4;
+  ring.style.width = `${size}px`;
+  ring.style.height = `${size}px`;
+  ring.style.left = `${x}px`;
+  ring.style.top = `${y}px`;
+  fxLayer.appendChild(ring);
+  setTimeout(() => ring.remove(), 340);
+}
+
+function flashBoard() {
+  const f = document.createElement('div');
+  f.className = 'flash-overlay';
+  fxLayer.appendChild(f);
+  setTimeout(() => f.remove(), 220);
+}
+
+function thumpBoard() {
+  boardEl.classList.remove('thump');
+  void boardEl.offsetWidth;
+  boardEl.classList.add('thump');
 }
 
 function screenShake() {
@@ -486,8 +511,11 @@ function doMerge(fromIndex, toIndex) {
   const rect = cellRect(toIndex);
   const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
   burstParticles(cx, cy, TIERS[newTier].emoji, Math.min(12, 6 + newTier));
+  spawnShockwave(cx, cy, newTier);
+  flashBoard();
+  thumpBoard();
   sfxMerge(newTier);
-  vibrate(newTier >= MAX_TIER ? [30, 60, 30, 60, 60] : [25]);
+  vibrate(newTier >= MAX_TIER ? [30, 60, 30, 60, 60] : [22]);
   if (newTier === MAX_TIER) { screenShake(); toast('👑 Crown Jewel forged!'); }
 
   renderTile(toIndex, false, true);
