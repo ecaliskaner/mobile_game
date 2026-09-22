@@ -1,0 +1,13 @@
+{
+  "name": "Merge Keep",
+  "short_name": "Merge Keep",
+  "description": "Merge creatures, build your castle. Fully offline.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1b1030",
+  "theme_color": "#1b1030",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

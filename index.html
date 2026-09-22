@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Merge Keep</title>
+<meta name="description" content="Merge creatures, build your castle. A pocket-sized offline merge game." />
+<meta name="theme-color" content="#1b1030" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icons/icon.svg" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- Top status bar -->
+  <header class="topbar">
+    <div class="stat coin" id="coinStat">
+      <span class="stat-icon">🪙</span>
+      <span class="stat-val" id="coinVal">0</span>
+    </div>
+    <div class="stat energy" id="energyStat">
+      <span class="stat-icon">⚡</span>
+      <span class="stat-val" id="energyVal">0/0</span>
+      <span class="stat-sub" id="energyTimer"></span>
+    </div>
+    <div class="stat streak" id="streakStat">
+      <span class="stat-icon">🔥</span>
+      <span class="stat-val" id="streakVal">0</span>
+    </div>
+  </header>
+
+  <!-- MERGE SCREEN -->
+  <main id="mergeScreen" class="screen active">
+    <div class="board-wrap">
+      <div id="board" class="board"></div>
+      <div id="fxLayer" class="fx-layer"></div>
+    </div>
+
+    <div class="spawner-row">
+      <button id="nestBtn" class="nest-btn">
+        <span class="nest-icon">🥚</span>
+        <span class="nest-label">Hatch<br><small>-1 ⚡</small></span>
+      </button>
+      <div class="combo-wrap" id="comboWrap" hidden>
+        <span id="comboText">Combo x1</span>
+      </div>
+    </div>
+  </main>
+
+  <!-- CASTLE SCREEN -->
+  <main id="castleScreen" class="screen">
+    <div class="castle-hero">
+      <div id="castleArt" class="castle-art">🏰</div>
+      <div class="castle-power">Castle Power: <span id="castlePower">0</span></div>
+    </div>
+
+    <div id="buildingsList" class="buildings-list"></div>
+
+    <h2 class="section-title">Bestiary</h2>
+    <div id="bestiary" class="bestiary"></div>
+
+    <h2 class="section-title">Achievements</h2>
+    <div id="achievements" class="achievements"></div>
+  </main>
+
+  <!-- Bottom nav -->
+  <nav class="bottomnav">
+    <button class="navbtn active" data-screen="mergeScreen">
+      <span class="navicon">🐣</span><span>Merge</span>
+    </button>
+    <button class="navbtn" data-screen="castleScreen">
+      <span class="navicon">🏰</span><span>Castle</span>
+    </button>
+    <button class="navbtn" id="muteBtn">
+      <span class="navicon" id="muteIcon">🔊</span><span>Sound</span>
+    </button>
+  </nav>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <!-- Daily reward modal -->
+  <div id="modalOverlay" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-icon">🔥</div>
+      <h2 id="modalTitle">Day 1 Streak!</h2>
+      <p id="modalBody">Welcome back!</p>
+      <button id="modalClose" class="modal-btn">Claim</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
