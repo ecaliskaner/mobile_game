@@ -289,13 +289,13 @@ function renderTile(index, justCreated, justMerged) {
     el.className = 'tile';
     el.dataset.id = t.id;
     boardEl.parentElement.querySelector('.board').appendChild(el);
-    el.innerHTML = `<span class="emoji"></span><span class="tierlabel"></span><span class="coin-badge" hidden>🪙</span>`;
+    el.innerHTML = `<span class="emoji"></span><span class="coin-badge" hidden>🪙</span>`;
     attachDrag(el);
     tileEls.set(t.id, el);
   }
   const info = TIERS[t.tier];
   el.querySelector('.emoji').textContent = info.emoji;
-  el.querySelector('.tierlabel').textContent = info.name;
+  el.title = info.name;
   el.querySelector('.coin-badge').hidden = !t.coinReady;
   positionTileEl(el, index, false);
   if (justCreated) { el.classList.remove('spawn-pop'); void el.offsetWidth; el.classList.add('spawn-pop'); }
@@ -391,9 +391,8 @@ function renderCastle() {
     const info = TIERS[tier];
     const slot = document.createElement('div');
     slot.className = 'bestiary-slot' + (seen ? '' : ' locked');
-    slot.innerHTML = seen
-      ? `<span>${info.emoji}</span><span class="bname">${info.name}</span>`
-      : `<span>❔</span>`;
+    slot.title = seen ? info.name : '???';
+    slot.innerHTML = seen ? `<span>${info.emoji}</span>` : `<span>❔</span>`;
     bestiaryEl.appendChild(slot);
   }
 
