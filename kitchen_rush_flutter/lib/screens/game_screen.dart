@@ -1,16 +1,27 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../game/game_controller.dart';
 import '../models/kitchen_tile.dart';
-import '../widgets/hud_widgets.dart';
-import '../widgets/kitchen_tile_widget.dart';
-import '../widgets/order_rail_widget.dart';
-import '../widgets/overlays.dart';
-import '../widgets/target_sign_widget.dart';
-import '../widgets/toolbar_gem_button.dart';
+import '../widgets/power_button.dart';
+import '../widgets/tile_face.dart';
+
+const _ink = Color(0xFF5A3A1E);
+const _accent = Color(0xFFE86A33);
+
+// Logical canvas: board panel on top, tray panel below. The whole canvas is
+// scaled with FittedBox, so every tile can fly between board and tray inside
+// one Stack via AnimatedPositioned.
+const double _canvasWidth = 360;
+const double _boardPad = 8;
+const double _boardPanelHeight = KitchenRushController.boardHeight + _boardPad * 2;
+const double _trayTop = _boardPanelHeight + 16;
+const double _trayPanelHeight = 64;
+const double _canvasHeight = _trayTop + _trayPanelHeight;
+const double _slotStep = KitchenRushController.tileSize + 4;
+const double _slotLeft =
+    (_canvasWidth - (KitchenRushController.trayCapacity * _slotStep - 4)) / 2;
+const double _slotTop = _trayTop + (_trayPanelHeight - KitchenRushController.tileSize) / 2;
 
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
@@ -20,289 +31,325 @@ class GameScreen extends StatefulWidget {
 }
 
 class _GameScreenState extends State<GameScreen> {
-  late final KitchenRushController controller;
-  String? _comboText;
-  Timer? _comboHideTimer;
-  Timer? _hintTimer;
-  String? _hintedTileId;
-  bool _gameOverDialogShown = false;
+  final controller = KitchenRushController();
+  GameStatus _lastStatus = GameStatus.playing;
 
   @override
   void initState() {
     super.initState();
-    controller = KitchenRushController();
-    controller.onMatch = _handleMatch;
-    controller.addListener(_onControllerChanged);
-    _hintTimer = Timer.periodic(const Duration(seconds: 6), (_) => _showHint());
-  }
-
-  void _onControllerChanged() {
-    if (controller.over && !_gameOverDialogShown) {
-      _gameOverDialogShown = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        final remaining = controller.tiles.where((t) => !t.removed).length;
-        showGameOverDialog(
-          context,
-          win: controller.isWin,
-          title: controller.isWin ? 'Mutfak Toplandı!' : 'Tezgah Taştı!',
-          body: controller.isWin
-              ? '${controller.chefTitle.name} olarak ${controller.elapsedSeconds} saniyede '
-                  '${controller.moves} hamlede topladın. Skor: ${controller.score}'
-              : 'Sipariş rayı doldu. Skor: ${controller.score} · Kalan malzeme: $remaining',
-          onRestart: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            setState(() {
-              _gameOverDialogShown = false;
-              controller.newGame();
-            });
-          },
-        );
-      });
-    }
-    setState(() {});
-  }
-
-  void _handleMatch(int comboCount, int bonus) {
-    if (comboCount >= 2) {
-      setState(() {
-        _comboText = comboCount >= 5 ? '🔥🔥 x$comboCount MUTFAK ATEŞİ!' : '🔥 x$comboCount Kombo!';
-      });
-      _comboHideTimer?.cancel();
-      _comboHideTimer = Timer(const Duration(milliseconds: 900), () {
-        if (mounted) setState(() => _comboText = null);
-      });
-    }
-  }
-
-  void _showHint() {
-    if (controller.over || controller.paused) return;
-    final clickable = controller.tiles.where((t) => !t.removed && !controller.isCovered(t)).toList();
-    if (clickable.isEmpty) return;
-    clickable.shuffle();
-    setState(() => _hintedTileId = clickable.first.id);
-    Timer(const Duration(milliseconds: 1400), () {
-      if (mounted) setState(() => _hintedTileId = null);
-    });
-  }
-
-  void _openPause() {
-    controller.setPaused(true);
-    showPauseDialog(
-      context,
-      onResume: () {
-        controller.setPaused(false);
-        Navigator.of(context, rootNavigator: true).pop();
-      },
-    );
+    controller.addListener(_onChanged);
   }
 
   @override
   void dispose() {
-    controller.removeListener(_onControllerChanged);
+    controller.removeListener(_onChanged);
     controller.dispose();
-    _comboHideTimer?.cancel();
-    _hintTimer?.cancel();
     super.dispose();
+  }
+
+  void _onChanged() {
+    final status = controller.status;
+    if (status != _lastStatus && status != GameStatus.playing) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showResult(status);
+      });
+    }
+    _lastStatus = status;
+    setState(() {});
+  }
+
+  Future<void> _showResult(GameStatus status) {
+    final won = status == GameStatus.won;
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFFFFFBF4),
+        icon: Icon(won ? LucideIcons.partyPopper : LucideIcons.cookingPot, size: 40, color: _accent),
+        title: Text(
+          won ? 'Seviye ${controller.level} tamam!' : 'Tezgah doldu',
+          style: const TextStyle(fontWeight: FontWeight.w900, color: _ink),
+        ),
+        content: Text(
+          won ? 'Bütün malzemeleri topladın.' : '7 göz doldu, eşleşecek üçlü kalmadı.',
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: _ink),
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          if (won)
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: _accent),
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                controller.nextLevel();
+              },
+              child: const Text('Sonraki seviye'),
+            )
+          else ...[
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                controller.restartLevel();
+              },
+              child: const Text('Tekrar dene', style: TextStyle(color: _ink)),
+            ),
+            if (controller.undoLeft > 0)
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: _accent),
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  controller.undo();
+                },
+                child: Text('Geri al (${controller.undoLeft})'),
+              ),
+          ],
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final remaining = controller.tiles.where((t) => !t.removed).length;
     return Scaffold(
-      body: SafeArea(
-        child: Stack(
-          children: [
-            SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 18),
-              child: Column(
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFFFF4E6), Color(0xFFFBDDBF)],
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              children: [
+                _TopBar(controller: controller),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Expanded(child: ChefBadge(title: controller.chefTitle.name, progress: controller.titleProgress)),
-                      const SizedBox(width: 8),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
+                      Flexible(
+                        child: FittedBox(
+                          child: SizedBox(
+                            width: _canvasWidth,
+                            height: _canvasHeight,
+                            child: _GameCanvas(controller: controller),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          MoveBadge(moves: controller.moves),
-                          PauseButton(onTap: _openPause),
+                          PowerButton(
+                            icon: LucideIcons.undo2,
+                            label: 'Geri al',
+                            count: controller.undoLeft,
+                            onPressed: controller.canUndo ? controller.undo : null,
+                          ),
+                          const SizedBox(width: 16),
+                          PowerButton(
+                            icon: LucideIcons.shuffle,
+                            label: 'Karıştır',
+                            count: controller.shuffleLeft,
+                            onPressed: controller.canShuffle ? controller.shuffle : null,
+                          ),
                         ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  const LogoRibbon(),
-                  const SizedBox(height: 8),
-                  TargetSignWidget(targets: controller.targetTypes, remainingOf: controller.remainingOf),
-                  const SizedBox(height: 8),
-                  _StatRow(controller: controller, remaining: remaining),
-                  const SizedBox(height: 8),
-                  _Board(controller: controller, hintedTileId: _hintedTileId),
-                  const SizedBox(height: 8),
-                  _RailCard(tray: controller.tray),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ToolbarGemButton(
-                        icon: LucideIcons.shuffle,
-                        label: 'Karıştır',
-                        badgeCount: controller.shuffleLeft,
-                        disabled: controller.shuffleLeft <= 0 || controller.over,
-                        onTap: controller.shuffleBoard,
-                      ),
-                      const SizedBox(width: 14),
-                      ToolbarGemButton(
-                        icon: LucideIcons.undo2,
-                        label: 'Geri Al',
-                        badgeCount: controller.undoLeft,
-                        disabled: controller.undoLeft <= 0 || controller.over,
-                        onTap: controller.undoLast,
-                      ),
-                      const SizedBox(width: 14),
-                      ToolbarGemButton(
-                        icon: LucideIcons.settings,
-                        label: 'Ayarlar',
-                        light: const Color(0xFF9D9D9D),
-                        base: const Color(0xFF5E5E5E),
-                        dark: const Color(0xFF3A3A3A),
-                        onTap: () => showHelpDialog(context),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(LucideIcons.sparkles, size: 14, color: Color(0xFFF0D9B0)),
-                      SizedBox(width: 5),
-                      Text('Afiyet olsun, Şef!', style: TextStyle(fontSize: 13, color: Color(0xFFF0D9B0))),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            IgnorePointer(
-              child: Center(
-                child: AnimatedOpacity(
-                  opacity: _comboText != null ? 1 : 0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Text(
-                    _comboText ?? '',
-                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 26, color: Color(0xFFFF8A3D)),
-                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _StatRow extends StatelessWidget {
+class _TopBar extends StatelessWidget {
   final KitchenRushController controller;
-  final int remaining;
-  const _StatRow({required this.controller, required this.remaining});
+  const _TopBar({required this.controller});
 
   @override
   Widget build(BuildContext context) {
-    Widget stat(String label, String value, {Color? valueColor}) => Expanded(
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 3),
-            padding: const EdgeInsets.symmetric(vertical: 7),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFFAF1),
-              borderRadius: BorderRadius.circular(13),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 8, offset: const Offset(0, 3))],
-            ),
-            child: Column(
-              children: [
-                Text(label,
-                    style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Color(0xFF8A6B47), letterSpacing: 0.4)),
-                const SizedBox(height: 2),
-                Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: valueColor ?? const Color(0xFF3A2712))),
-              ],
-            ),
-          ),
-        );
     return Row(
       children: [
-        stat('KALAN', '$remaining'),
-        stat('SKOR', '${controller.score}'),
-        stat('KOMBO', controller.comboCount >= 2 ? '🔥x${controller.comboCount}' : '—', valueColor: const Color(0xFFFF8A3D)),
-        stat('SÜRE', '${controller.elapsedSeconds}s'),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Mutfak Telaşı',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: _ink, height: 1.1)),
+            Text('Seviye ${controller.level}',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _accent)),
+          ],
+        ),
+        const Spacer(),
+        _Chip(icon: LucideIcons.layers, label: '${controller.remainingCount}'),
+        const SizedBox(width: 8),
+        IconButton.filled(
+          onPressed: controller.restartLevel,
+          icon: const Icon(LucideIcons.rotateCcw, size: 20),
+          style: IconButton.styleFrom(backgroundColor: Colors.white, foregroundColor: _ink),
+          tooltip: 'Yeniden başla',
+        ),
       ],
     );
   }
 }
 
-class _Board extends StatelessWidget {
-  final KitchenRushController controller;
-  final String? hintedTileId;
-  const _Board({required this.controller, required this.hintedTileId});
-
-  @override
-  Widget build(BuildContext context) {
-    const boardW = KitchenRushController.boardWidth;
-    const boardH = KitchenRushController.boardHeight;
-
-    final board = Container(
-      padding: const EdgeInsets.fromLTRB(10, 10, 10, 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF8A5C2C),
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 16, offset: const Offset(0, 6))],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          width: boardW,
-          height: boardH,
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(colors: [Color(0xFFFFF7E6), Color(0xFFECD6A6)], begin: Alignment.topCenter, end: Alignment.bottomCenter),
-          ),
-          child: Stack(
-            children: controller.tiles.where((t) => !t.removed).map((tile) {
-              final covered = controller.isCovered(tile);
-              return Positioned(
-                left: tile.x,
-                top: tile.y,
-                child: KitchenTileWidget(
-                  tile: tile,
-                  size: KitchenRushController.tileSize,
-                  covered: covered,
-                  hinted: tile.id == hintedTileId,
-                  onTap: () => controller.onTileTap(tile),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-      ),
-    );
-
-    // Scale the fixed-size board down on narrow phones without breaking hit-testing.
-    return Center(child: FittedBox(fit: BoxFit.scaleDown, child: board));
-  }
-}
-
-class _RailCard extends StatelessWidget {
-  final List<TrayItem> tray;
-  const _RailCard({required this.tray});
+class _Chip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _Chip({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(10, 14, 10, 9),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE7E2D8),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 8, offset: const Offset(0, 3))],
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(999)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: _ink),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w800, color: _ink)),
+        ],
       ),
-      child: OrderRailWidget(tray: tray),
+    );
+  }
+}
+
+class _GameCanvas extends StatelessWidget {
+  final KitchenRushController controller;
+  const _GameCanvas({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    const size = KitchenRushController.tileSize;
+    final boardTiles = controller.tiles.where((t) => t.onBoard).toList()
+      ..sort((a, b) => a.layer != b.layer ? a.layer - b.layer : a.y.compareTo(b.y));
+
+    Widget tileAt(KitchenTile tile, double left, double top, {bool covered = false, VoidCallback? onTap}) {
+      return AnimatedPositioned(
+        key: ValueKey(tile.id),
+        duration: KitchenRushController.flightDuration,
+        curve: Curves.easeOutCubic,
+        left: left,
+        top: top,
+        width: size,
+        height: size,
+        child: _Pressable(
+          onTap: onTap,
+          child: AnimatedScale(
+            scale: tile.state == TileState.clearing ? 0 : 1,
+            duration: KitchenRushController.clearDuration,
+            curve: Curves.easeInBack,
+            child: TileFace(type: tile.type, size: size, covered: covered),
+          ),
+        ),
+      );
+    }
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          left: 0,
+          top: 0,
+          width: _canvasWidth,
+          height: _boardPanelHeight,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0xFFF6E3C6),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xFFEBCFA5), width: 2),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          top: _trayTop,
+          width: _canvasWidth,
+          height: _trayPanelHeight,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF9C6B3F), Color(0xFF7A4F2A)],
+              ),
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 10, offset: const Offset(0, 4)),
+              ],
+            ),
+          ),
+        ),
+        for (int i = 0; i < KitchenRushController.trayCapacity; i++)
+          Positioned(
+            left: _slotLeft + i * _slotStep,
+            top: _slotTop,
+            width: size,
+            height: size,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.22),
+                borderRadius: BorderRadius.circular(size * 0.24),
+              ),
+            ),
+          ),
+        for (final tile in boardTiles)
+          () {
+            final covered = controller.isCovered(tile);
+            return tileAt(
+              tile,
+              _boardPad + tile.x,
+              _boardPad + tile.y,
+              covered: covered,
+              onTap: covered ? null : () => controller.tap(tile),
+            );
+          }(),
+        for (int i = 0; i < controller.tray.length; i++)
+          tileAt(controller.tray[i], _slotLeft + i * _slotStep, _slotTop),
+      ],
+    );
+  }
+}
+
+/// Shrinks slightly while pressed so taps feel physical.
+class _Pressable extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  const _Pressable({required this.child, required this.onTap});
+
+  @override
+  State<_Pressable> createState() => _PressableState();
+}
+
+class _PressableState extends State<_Pressable> {
+  bool _down = false;
+
+  void _set(bool v) {
+    if (widget.onTap != null && _down != v) setState(() => _down = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => _set(true),
+      onTapCancel: () => _set(false),
+      onTapUp: (_) => _set(false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _down ? 0.9 : 1,
+        duration: const Duration(milliseconds: 90),
+        child: widget.child,
+      ),
     );
   }
 }

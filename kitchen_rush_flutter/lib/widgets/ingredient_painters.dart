@@ -109,30 +109,43 @@ class PepperPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width, h = size.height;
+    // A long, curved green chili (sivri biber) — deliberately not red and
+    // not round, so it never reads as a tomato at a glance.
     final body = Paint()
       ..shader = const LinearGradient(
-        colors: [Color(0xFFFF6A5A), Color(0xFFB81F1A)],
+        colors: [Color(0xFF8FD14F), Color(0xFF2E7D32)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ).createShader(Rect.fromLTWH(0, 0, w, h));
     final path = Path()
-      ..moveTo(w * 0.32, h * 0.28)
-      ..cubicTo(w * 0.65, h * 0.12, w * 0.95, h * 0.35, w * 0.85, h * 0.6)
-      ..cubicTo(w * 0.75, h * 0.92, w * 0.4, h * 0.98, w * 0.28, h * 0.78)
-      ..cubicTo(w * 0.18, h * 0.6, w * 0.22, h * 0.42, w * 0.32, h * 0.28)
+      ..moveTo(w * 0.18, h * 0.30)
+      ..cubicTo(w * 0.26, h * 0.16, w * 0.42, h * 0.16, w * 0.46, h * 0.28)
+      ..cubicTo(w * 0.54, h * 0.52, w * 0.72, h * 0.70, w * 0.92, h * 0.90)
+      ..cubicTo(w * 0.64, h * 0.86, w * 0.34, h * 0.66, w * 0.18, h * 0.30)
       ..close();
     canvas.drawPath(path, body);
 
     final stem = Paint()
-      ..color = const Color(0xFF4C9A3B)
-      ..strokeWidth = 2.2
+      ..color = const Color(0xFF5D7A2A)
+      ..strokeWidth = w * 0.07
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
-    canvas.drawLine(Offset(w * 0.32, h * 0.28), Offset(w * 0.26, h * 0.12), stem);
+    canvas.drawPath(
+      Path()
+        ..moveTo(w * 0.30, h * 0.20)
+        ..quadraticBezierTo(w * 0.24, h * 0.08, w * 0.12, h * 0.08),
+      stem,
+    );
 
-    final highlight = Paint()..color = Colors.white.withValues(alpha: 0.26);
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(w * 0.42, h * 0.42), width: w * 0.16, height: h * 0.24),
+    final highlight = Paint()
+      ..color = Colors.white.withValues(alpha: 0.35)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = w * 0.04
+      ..strokeCap = StrokeCap.round;
+    canvas.drawPath(
+      Path()
+        ..moveTo(w * 0.30, h * 0.30)
+        ..quadraticBezierTo(w * 0.40, h * 0.50, w * 0.58, h * 0.64),
       highlight,
     );
   }

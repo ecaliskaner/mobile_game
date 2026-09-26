@@ -62,8 +62,8 @@ const Map<IngredientType, IngredientSpec> kIngredientSpecs = {
   ),
   IngredientType.pepper: IngredientSpec(
     labelTr: 'Biber',
-    primary: Color(0xFFFF6A5A),
-    secondary: Color(0xFFB81F1A),
+    primary: Color(0xFF8FD14F),
+    secondary: Color(0xFF2E7D32),
   ),
   IngredientType.cheese: IngredientSpec(
     labelTr: 'Peynir',

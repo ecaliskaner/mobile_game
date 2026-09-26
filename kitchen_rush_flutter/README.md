@@ -1,75 +1,59 @@
 # Mutfak Telaşı (Flutter)
 
-Yang Le Ge Yang tarzı katmanlı eşleştirme bulmacasının mutfak konseptli
-Flutter portu. Web'deki HTML/JS prototipiyle aynı oyun mantığını
-(`lib/game/game_controller.dart`) kullanır; arayüz tamamen Material 3
-widget'ları ve özel (custom) widget'larla, emojisiz olarak yeniden
-kurulmuştur.
+Yang Le Ge Yang tarzı katmanlı eşleştirme bulmacası, mutfak konseptiyle.
+Üstü açık malzemelere dokun, 7 gözlü tepsiye gönder, aynı malzemeden 3
+tane yan yana gelince patlar. Tepsi eşleşmesiz dolarsa kaybedersin.
 
-## Nasıl çalıştırılır
+## Çalıştırma
 
-Bu oturumda Flutter SDK kurulu değildi, bu yüzden kod derlenip
-çalıştırılarak doğrulanamadı — dosyalar dikkatle elle yazıldı. Kendi
-makinenizde:
+İlk kez klonladıysanız platform klasörlerini (android/, windows/, web/…)
+oluşturmak için bir kez `flutter create .` çalıştırın; `lib/` ve
+`pubspec.yaml` dosyalarına dokunmaz.
 
-```bash
-cd kitchen_rush_flutter
+```
+flutter create .
 flutter pub get
-flutter analyze   # önce hızlı bir statik kontrol için önerilir
 flutter run
 ```
 
-Bir syntax/typo hatasıyla karşılaşırsanız (ör. bir Lucide ikon adı sürüm
-farkı nedeniyle değişmiş olabilir), `flutter analyze` çıktısını paylaşın,
-hemen düzeltirim.
+Testler: `flutter test`
+
+## Kurallar ve algoritma
+
+- **Sıralı tepsi:** yeni gelen karo, tepside aynı türden karo varsa onun
+  hemen yanına yerleşir; yoksa sona eklenir. Bu yüzden eşleşme her zaman
+  yan yana duran 3 karodur (ör. domates, domates, havuç + domates →
+  domates, domates, domates, havuç → üç domates patlar).
+- **Animasyonla senkron:** eşleşme, karo tepsiye *indikten sonra*
+  kontrol edilir; havadaki bir karo erkenden patlamaz.
+- **Geri al:** yalnızca tepside duran son karoyu tahtaya geri koyar, daha
+  önce patlamış bir karoyu asla geri getirmez. Kaybettikten sonra da
+  kullanılabilir (oyuna devam).
+- **Karıştır:** tahtadaki karoları yeniden dizer, katman yapısını korur.
+- **Seviyeler:** 1. seviye 30 karo / 2 katman, 2. seviye 54 karo / 3
+  katman, 3. seviye ve sonrası 72 karo / 4 katman.
 
 ## Kütüphaneler
 
-- **Material 3** — `ThemeData(useMaterial3: true)`, `ColorScheme.fromSeed`.
-- **lucide_icons_flutter** — havuç, et, yumurta ve tüm arayüz ikonları
-  (duraklat, karıştır, geri al, ayarlar, hedef, onay) için gerçek Lucide
-  ikonları.
-- **google_fonts** — Nunito tipografisi.
-- Emoji **kullanılmadı** (yalnızca birkaç serbest metin dizesi hariç, ör.
-  "🔥 Kombo" toast metni — arayüz kontrolü/ikon değil).
-
-## Neden bazı malzemeler Lucide değil, özel çizim?
-
-Lucide setinde `Carrot`, `Beef` ve `Egg` var; ama **domates, soğan,
-sarımsak, biber, peynir** için Lucide'de karşılık gelen bir ikon yok. Bu
-beşi emoji yerine `lib/widgets/ingredient_painters.dart` içinde
-`CustomPainter` ile elle çizilmiş, gradyanlı vektör glyph'ler olarak
-render ediliyor (`ingredient_glyph.dart` ikisi arasında otomatik seçim
-yapıyor).
+- Material 3 (`useMaterial3: true`, `ColorScheme.fromSeed`)
+- `lucide_icons_flutter` — arayüz ikonları ve havuç/et/yumurta
+- Domates, soğan, sarımsak, biber, peynir için Lucide'de ikon olmadığından
+  `CustomPainter` ile çizilmiş vektör ikonlar (`ingredient_painters.dart`)
+- İnternet gerektiren font indirmesi yok; oyun tamamen çevrimdışı çalışır.
 
 ## Dosya yapısı
 
 ```
 lib/
-  main.dart                    # MaterialApp + tema
-  models/
-    ingredient.dart            # 8 malzeme tipi + renk/ikon eşlemesi
-    kitchen_tile.dart           # KitchenTile, TrayItem, ChefTitleTier
-  game/
-    game_controller.dart        # Tüm oyun mantığı (ChangeNotifier)
-  widgets/
-    ingredient_glyph.dart       # Lucide ikon / özel çizim seçici
-    ingredient_painters.dart    # CustomPainter glyph'ler
-    kitchen_tile_widget.dart    # Tahtadaki tek karo
-    order_rail_widget.dart      # 7 gözlü sipariş rayı
-    hud_widgets.dart            # Aşçı rozeti, hamle sayacı, duraklat, logo
-    target_sign_widget.dart     # Hedef malzeme panosu
-    toolbar_gem_button.dart     # Karıştır/Geri Al/Ayarlar butonları
-    overlays.dart               # Oyun sonu / mola / yardım dialogları
-  screens/
-    game_screen.dart            # Ekranı birleştiren ana Scaffold
+  main.dart                  MaterialApp + tema
+  models/ingredient.dart      8 malzeme tipi, renk/ikon eşlemesi
+  models/kitchen_tile.dart    Karo durumu (tahta/tepsi/patlıyor/bitti), seviye ayarı
+  game/game_controller.dart   Oyun kuralları (ChangeNotifier)
+  widgets/tile_face.dart      Tek karo görünümü
+  widgets/ingredient_glyph.dart   Lucide ikon / özel çizim seçici
+  widgets/ingredient_painters.dart CustomPainter ikonlar
+  widgets/power_button.dart   Geri al / Karıştır butonları
+  screens/game_screen.dart    Ekran: tahta + tepsi tek Stack'te, karolar
+                              AnimatedPositioned ile uçarak tepsiye gider
+test/game_controller_test.dart  Kural testleri
 ```
-
-## HTML prototipine göre bilinçli sadeleştirmeler
-
-- Buhar (steam) ambiyans animasyonu ve karo uçuş animasyonu (tray'e
-  uçan ikon) bu ilk portta yok; oyun mantığı ve HUD birebir taşındı.
-  İsterseniz bir sonraki adımda `AnimatedPositioned` / `Overlay` ile
-  eklenebilir.
-- Tahta sabit mantıksal boyutta (356×352) tutulup `FittedBox` ile dar
-  ekranlara ölçekleniyor; tam responsive grid yeniden hesaplama yapılmadı.

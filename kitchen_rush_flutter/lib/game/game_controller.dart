@@ -1,301 +1,286 @@
 import 'dart:async';
 import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import '../models/ingredient.dart';
 import '../models/kitchen_tile.dart';
 
-/// Full game state + rules for Mutfak Telaşı (a Yang Le Ge Yang–style
-/// layered matching puzzle), ported from the original HTML/JS prototype.
-///
-/// Widgets consume this via [ListenableBuilder] / [AnimatedBuilder] — no
-/// external state-management package is needed since [ChangeNotifier] is
-/// already part of the Flutter SDK.
+enum GameStatus { playing, won, lost }
+
 class KitchenRushController extends ChangeNotifier {
-  static const List<int> layerCounts = [30, 22, 14, 6]; // sum = 72 = 8 types * 9
-  static const int countPerType = 9;
-  static const int trayMax = 7;
-  static const double tileSize = 42;
-  static const double boardWidth = 356;
-  static const double boardHeight = 352;
-  static const Duration comboWindow = Duration(milliseconds: 3200);
+  static const double tileSize = 44;
+  static const double cell = 50;
+  static const double boardWidth = 344;
+  static const double boardHeight = 384;
+  static const int trayCapacity = 7;
+  static const Duration flightDuration = Duration(milliseconds: 260);
+  static const Duration clearDuration = Duration(milliseconds: 220);
 
-  final Random _rng = Random();
+  final Random _rng;
 
+  /// When false, matches resolve synchronously — used by tests.
+  final bool animate;
+
+  int level = 1;
   List<KitchenTile> tiles = [];
-  List<TrayItem> tray = [];
+
+  /// Ordered tray contents. Same-type tiles are always kept adjacent, so a
+  /// match is always three neighbouring slots.
+  final List<KitchenTile> tray = [];
+  final Set<String> _arrived = {};
   final List<String> _history = [];
+  final List<Timer> _timers = [];
 
-  int shuffleLeft = 2;
   int undoLeft = 3;
-  int score = 0;
-  int moves = 0;
-  int comboCount = 0;
-  int lastMatchBonus = 0;
-  DateTime? _lastMatchTs;
-  DateTime _startTs = DateTime.now();
-  int elapsedSeconds = 0;
-  bool over = false;
-  bool isWin = false;
-  bool paused = false;
-  List<IngredientType> targetTypes = [];
+  int shuffleLeft = 2;
+  GameStatus status = GameStatus.playing;
 
-  /// Fired whenever a triplet resolves, so the UI can show a transient
-  /// combo badge / toast without polling every frame.
-  void Function(int comboCount, int bonus)? onMatch;
-
-  Timer? _timer;
-
-  KitchenRushController() {
-    newGame();
+  KitchenRushController({Random? rng, this.animate = true}) : _rng = rng ?? Random() {
+    startLevel(1);
   }
 
-  void newGame() {
-    final typeList = <IngredientType>[];
-    for (final t in IngredientType.values) {
-      for (int i = 0; i < countPerType; i++) {
-        typeList.add(t);
+  int get remainingCount =>
+      tiles.where((t) => t.state == TileState.board || t.state == TileState.tray).length;
+
+  int get _activeTrayCount => tray.where((t) => t.state == TileState.tray).length;
+
+  bool get canUndo =>
+      status == GameStatus.playing && undoLeft > 0 && _lastUndoableTile() != null;
+
+  bool get canShuffle =>
+      status == GameStatus.playing && shuffleLeft > 0 && tiles.any((t) => t.onBoard);
+
+  void startLevel(int newLevel) {
+    _cancelTimers();
+    level = newLevel;
+    final config = LevelConfig.forLevel(level);
+
+    final types = List<IngredientType>.from(IngredientType.values)..shuffle(_rng);
+    final deck = <IngredientType>[];
+    for (final type in types.take(config.typeCount)) {
+      for (int i = 0; i < config.setsPerType * 3; i++) {
+        deck.add(type);
       }
     }
-    typeList.shuffle(_rng);
+    deck.shuffle(_rng);
 
-    final layerPositions = _genLayerPositions(layerCounts);
+    final positions = _layout(config.layerCounts);
     tiles = [];
-    int cursor = 0;
-    for (int l = 0; l < layerCounts.length; l++) {
-      for (int i = 0; i < layerCounts[l]; i++) {
-        final pos = layerPositions[l][i];
-        tiles.add(KitchenTile(
-          id: 't$cursor',
-          type: typeList[cursor],
-          layer: l,
-          x: pos.dx,
-          y: pos.dy,
-        ));
+    var cursor = 0;
+    for (int layer = 0; layer < positions.length; layer++) {
+      for (final pos in positions[layer]) {
+        tiles.add(KitchenTile(id: 't$cursor', type: deck[cursor], layer: layer, x: pos.dx, y: pos.dy));
         cursor++;
       }
     }
 
-    tray = [];
+    tray.clear();
+    _arrived.clear();
     _history.clear();
-    shuffleLeft = 2;
     undoLeft = 3;
-    score = 0;
-    moves = 0;
-    comboCount = 0;
-    lastMatchBonus = 0;
-    _lastMatchTs = null;
-    over = false;
-    isWin = false;
-    paused = false;
-    elapsedSeconds = 0;
-    _startTs = DateTime.now();
-
-    final allTypes = List<IngredientType>.from(IngredientType.values)..shuffle(_rng);
-    targetTypes = allTypes.take(3).toList();
-
-    _startTimer();
+    shuffleLeft = 2;
+    status = GameStatus.playing;
     notifyListeners();
   }
 
-  /// Generates stacked-layer positions: layer 0 sits on a jittered grid,
-  /// every tile in layer N+1 is jittered off a random parent tile in layer
-  /// N, so higher layers always cover at least one lower tile — the same
-  /// "pyramid" trick the HTML prototype uses.
-  List<List<Offset>> _genLayerPositions(List<int> counts) {
-    final layers = <List<Offset>>[];
+  void restartLevel() => startLevel(level);
 
-    final l0count = counts[0];
-    const cols = 6;
-    final rows = (l0count / cols).ceil();
-    const cellW = (boardWidth - tileSize) / (cols - 1);
-    final cellH = (boardHeight - tileSize) / (rows > 1 ? rows - 1 : 1);
-    final idxs = List<int>.generate(cols * rows, (i) => i)..shuffle(_rng);
-    final l0 = <Offset>[];
-    for (int i = 0; i < l0count; i++) {
-      final cellIdx = idxs[i];
-      final col = cellIdx % cols;
-      final row = cellIdx ~/ cols;
-      final jx = (_rng.nextDouble() - 0.5) * 10;
-      final jy = (_rng.nextDouble() - 0.5) * 10;
-      l0.add(Offset(
-        (col * cellW + jx).clamp(0, boardWidth - tileSize).toDouble(),
-        (row * cellH + jy).clamp(0, boardHeight - tileSize).toDouble(),
-      ));
-    }
-    layers.add(l0);
-
-    for (int l = 1; l < counts.length; l++) {
-      final prev = layers[l - 1];
-      final cur = <Offset>[];
-      for (int i = 0; i < counts[l]; i++) {
-        final parent = prev[_rng.nextInt(prev.length)];
-        final jx = (_rng.nextDouble() - 0.5) * 26;
-        final jy = (_rng.nextDouble() - 0.5) * 26;
-        cur.add(Offset(
-          (parent.dx + jx).clamp(0, boardWidth - tileSize).toDouble(),
-          (parent.dy + jy).clamp(0, boardHeight - tileSize).toDouble(),
-        ));
-      }
-      layers.add(cur);
-    }
-    return layers;
-  }
+  void nextLevel() => startLevel(level + 1);
 
   bool isCovered(KitchenTile tile) {
-    if (tile.removed) return false;
+    if (!tile.onBoard) return false;
     for (final other in tiles) {
-      if (identical(other, tile) || other.removed) continue;
-      if (other.layer <= tile.layer) continue;
-      if (_overlap(other, tile)) return true;
+      if (!other.onBoard || other.layer <= tile.layer) continue;
+      if (_overlaps(other.x, other.y, tile.x, tile.y)) return true;
     }
     return false;
   }
 
-  bool _overlap(KitchenTile a, KitchenTile b) {
-    return a.x < b.x + tileSize &&
-        a.x + tileSize > b.x &&
-        a.y < b.y + tileSize &&
-        a.y + tileSize > b.y;
-  }
+  void tap(KitchenTile tile) {
+    if (status != GameStatus.playing || !tile.onBoard || isCovered(tile)) return;
+    if (_activeTrayCount >= trayCapacity) return;
 
-  int remainingOf(IngredientType type) =>
-      tiles.where((t) => !t.removed && t.type == type).length;
-
-  void onTileTap(KitchenTile tile) {
-    if (over || paused) return;
-    if (tray.length >= trayMax) return;
-    if (tile.removed || isCovered(tile)) return;
-
-    tile.removed = true;
-    moves++;
-    tray.add(TrayItem(tile.id, tile.type));
+    final lastSame = tray.lastIndexWhere((t) => t.state == TileState.tray && t.type == tile.type);
+    final insertAt = lastSame >= 0 ? lastSame + 1 : tray.length;
+    tile.state = TileState.tray;
+    tray.insert(insertAt, tile);
+    _history.add(tile.id);
     notifyListeners();
-    _resolveTray(tile.id);
+
+    _after(flightDuration, () => _onArrived(tile));
   }
 
-  void _resolveTray(String justAddedId) {
-    final counts = <IngredientType, int>{};
-    for (final it in tray) {
-      counts[it.type] = (counts[it.type] ?? 0) + 1;
-    }
-    IngredientType? matchType;
-    for (final entry in counts.entries) {
-      if (entry.value >= 3) {
-        matchType = entry.key;
-        break;
-      }
-    }
+  void _onArrived(KitchenTile tile) {
+    if (tile.state != TileState.tray) return;
+    _arrived.add(tile.id);
 
-    if (matchType != null) {
-      int removedCount = 0;
-      final next = <TrayItem>[];
-      for (final it in tray) {
-        if (it.type == matchType && removedCount < 3) {
-          removedCount++;
-          continue;
+    final match = _findMatch();
+    if (match != null) {
+      for (final t in match) {
+        t.state = TileState.clearing;
+        _history.remove(t.id);
+      }
+      notifyListeners();
+      _after(clearDuration, () {
+        for (final t in match) {
+          t.state = TileState.cleared;
+          tray.remove(t);
+          _arrived.remove(t.id);
         }
-        next.add(it);
-      }
-      tray = next;
+        if (tiles.every((t) => t.state == TileState.cleared)) status = GameStatus.won;
+        notifyListeners();
+      });
+      return;
+    }
 
-      final now = DateTime.now();
-      if (_lastMatchTs != null && now.difference(_lastMatchTs!) < comboWindow) {
-        comboCount++;
-      } else {
-        comboCount = 1;
-      }
-      _lastMatchTs = now;
-      final bonus = comboCount >= 2 ? 30 + (comboCount - 1) * 15 : 30;
-      score += bonus;
-      lastMatchBonus = bonus;
-      notifyListeners();
-      onMatch?.call(comboCount, bonus);
-      _checkWin();
-    } else {
-      _history.add(justAddedId);
-      notifyListeners();
-      if (tray.length >= trayMax) _endGame(false);
-    }
-  }
-
-  void shuffleBoard() {
-    if (shuffleLeft <= 0 || over || paused) return;
-    shuffleLeft--;
-    final byLayer = List.generate(layerCounts.length, (_) => <KitchenTile>[]);
-    for (final t in tiles) {
-      if (!t.removed) byLayer[t.layer].add(t);
-    }
-    final counts = byLayer.map((l) => l.length).toList();
-    final newPos = _genLayerPositions(counts);
-    for (int l = 0; l < byLayer.length; l++) {
-      for (int i = 0; i < byLayer[l].length && i < newPos[l].length; i++) {
-        byLayer[l][i].x = newPos[l][i].dx;
-        byLayer[l][i].y = newPos[l][i].dy;
-      }
-    }
+    final active = tray.where((t) => t.state == TileState.tray).toList();
+    final allLanded = active.every((t) => _arrived.contains(t.id));
+    if (active.length >= trayCapacity && allLanded) status = GameStatus.lost;
     notifyListeners();
   }
 
-  void undoLast() {
-    if (undoLeft <= 0 || over || paused || _history.isEmpty) return;
-    final lastId = _history.removeLast();
-    final tile = tiles.firstWhere((t) => t.id == lastId);
-    tile.removed = false;
-    final idx = tray.indexWhere((it) => it.id == lastId);
-    if (idx >= 0) tray.removeAt(idx);
+  List<KitchenTile>? _findMatch() {
+    final active = tray.where((t) => t.state == TileState.tray).toList();
+    for (int i = 0; i + 2 < active.length; i++) {
+      final group = active.sublist(i, i + 3);
+      final sameType = group.every((t) => t.type == group.first.type);
+      final landed = group.every((t) => _arrived.contains(t.id));
+      if (sameType && landed) return group;
+    }
+    return null;
+  }
+
+  KitchenTile? _lastUndoableTile() {
+    for (int i = _history.length - 1; i >= 0; i--) {
+      final tile = tiles.firstWhere((t) => t.id == _history[i]);
+      if (tile.state == TileState.tray) return _arrived.contains(tile.id) ? tile : null;
+    }
+    return null;
+  }
+
+  void undo() {
+    final revivingFromLoss = status == GameStatus.lost;
+    if (revivingFromLoss) status = GameStatus.playing;
+    final tile = _lastUndoableTile();
+    if (undoLeft <= 0 || tile == null) {
+      if (revivingFromLoss) status = GameStatus.lost;
+      return;
+    }
+    tray.remove(tile);
+    _arrived.remove(tile.id);
+    _history.remove(tile.id);
+    tile.state = TileState.board;
     undoLeft--;
     notifyListeners();
   }
 
-  void setPaused(bool value) {
-    if (over) return;
-    paused = value;
-    notifyListeners();
-  }
-
-  ChefTitleTier get chefTitle {
-    var cur = kChefTitles.first;
-    for (final t in kChefTitles) {
-      if (score >= t.minScore) cur = t;
-    }
-    return cur;
-  }
-
-  double get titleProgress {
-    final idx = kChefTitles.indexOf(chefTitle);
-    if (idx == kChefTitles.length - 1) return 1.0;
-    final next = kChefTitles[idx + 1];
-    final span = next.minScore - chefTitle.minScore;
-    if (span <= 0) return 1.0;
-    return ((score - chefTitle.minScore) / span).clamp(0.0, 1.0);
-  }
-
-  void _startTimer() {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!over && !paused) {
-        elapsedSeconds = DateTime.now().difference(_startTs).inSeconds;
-        notifyListeners();
+  void shuffle() {
+    if (!canShuffle) return;
+    shuffleLeft--;
+    final onBoard = tiles.where((t) => t.onBoard).toList()..shuffle(_rng);
+    final maxLayer = onBoard.map((t) => t.layer).reduce(max);
+    final byLayer = List.generate(maxLayer + 1, (l) => onBoard.where((t) => t.layer == l).toList());
+    final positions = _layout(byLayer.map((l) => l.length).toList());
+    for (int l = 0; l < byLayer.length; l++) {
+      for (int i = 0; i < byLayer[l].length; i++) {
+        byLayer[l][i]
+          ..x = positions[l][i].dx
+          ..y = positions[l][i].dy;
       }
-    });
-  }
-
-  void _checkWin() {
-    final remaining = tiles.where((t) => !t.removed).length;
-    if (remaining == 0 && tray.isEmpty) _endGame(true);
-  }
-
-  void _endGame(bool win) {
-    over = true;
-    isWin = win;
-    _timer?.cancel();
+    }
     notifyListeners();
+  }
+
+  /// Lays tiles out mahjong-style: the lowest non-empty layer sits on a
+  /// centred grid; each higher tile sits half a cell off a random tile of
+  /// the layer below, so it always partially covers something. Tiles in
+  /// the same layer never overlap each other.
+  List<List<Offset>> _layout(List<int> counts) {
+    final layers = <List<Offset>>[];
+    List<Offset> below = [];
+    for (final count in counts) {
+      final placed = <Offset>[];
+      for (int i = 0; i < count; i++) {
+        placed.add(below.isEmpty ? _gridSpot(placed, count) : _stackedSpot(below, placed));
+      }
+      layers.add(placed);
+      if (placed.isNotEmpty) below = placed;
+    }
+    return layers;
+  }
+
+  Offset _gridSpot(List<Offset> placed, int count) {
+    const cols = 7;
+    final rows = min((count / cols).ceil() + 1, 7);
+    const left = (boardWidth - ((cols - 1) * cell + tileSize)) / 2;
+    final top = (boardHeight - ((rows - 1) * cell + tileSize)) / 2;
+    final cells = List.generate(cols * rows, (i) => Offset(left + (i % cols) * cell, top + (i ~/ cols) * cell))
+      ..shuffle(_rng);
+    return cells.firstWhere((c) => _isFree(c, placed), orElse: () => _anyFreeSpot(placed));
+  }
+
+  Offset _stackedSpot(List<Offset> below, List<Offset> placed) {
+    const h = cell / 2;
+    const offsets = [
+      Offset(-h, -h), Offset(h, -h), Offset(-h, h), Offset(h, h),
+      Offset(0, -h), Offset(0, h), Offset(-h, 0), Offset(h, 0),
+    ];
+    for (int attempt = 0; attempt < 40; attempt++) {
+      final parent = below[_rng.nextInt(below.length)];
+      final o = offsets[_rng.nextInt(offsets.length)];
+      final spot = Offset(
+        (parent.dx + o.dx).clamp(0.0, boardWidth - tileSize),
+        (parent.dy + o.dy).clamp(0.0, boardHeight - tileSize),
+      );
+      if (_isFree(spot, placed)) return spot;
+    }
+    return _anyFreeSpot(placed);
+  }
+
+  Offset _anyFreeSpot(List<Offset> placed) {
+    const h = cell / 2;
+    final spots = <Offset>[];
+    for (double y = 0; y <= boardHeight - tileSize; y += h) {
+      for (double x = 0; x <= boardWidth - tileSize; x += h) {
+        spots.add(Offset(x, y));
+      }
+    }
+    spots.shuffle(_rng);
+    return spots.firstWhere((s) => _isFree(s, placed), orElse: () => spots.first);
+  }
+
+  bool _isFree(Offset spot, List<Offset> placed) =>
+      placed.every((p) => !_overlaps(p.dx, p.dy, spot.dx, spot.dy));
+
+  static bool _overlaps(double ax, double ay, double bx, double by) =>
+      (ax - bx).abs() < tileSize && (ay - by).abs() < tileSize;
+
+  void _after(Duration delay, VoidCallback action) {
+    if (!animate) {
+      action();
+      return;
+    }
+    final gameLevel = level;
+    final gameTiles = tiles;
+    late final Timer timer;
+    timer = Timer(delay, () {
+      _timers.remove(timer);
+      if (level == gameLevel && identical(tiles, gameTiles)) action();
+    });
+    _timers.add(timer);
+  }
+
+  void _cancelTimers() {
+    for (final t in _timers) {
+      t.cancel();
+    }
+    _timers.clear();
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _cancelTimers();
     super.dispose();
   }
 }
