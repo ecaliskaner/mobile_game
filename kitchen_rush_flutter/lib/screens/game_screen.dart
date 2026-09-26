@@ -216,7 +216,7 @@ class _StatRow extends StatelessWidget {
             decoration: BoxDecoration(
               color: const Color(0xFFFFFAF1),
               borderRadius: BorderRadius.circular(13),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 8, offset: const Offset(0, 3))],
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 8, offset: const Offset(0, 3))],
             ),
             child: Column(
               children: [
@@ -254,7 +254,7 @@ class _Board extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF8A5C2C),
         borderRadius: BorderRadius.circular(22),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.35), blurRadius: 16, offset: const Offset(0, 6))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 16, offset: const Offset(0, 6))],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
@@ -300,7 +300,7 @@ class _RailCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFE7E2D8),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 8, offset: const Offset(0, 3))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 8, offset: const Offset(0, 3))],
       ),
       child: OrderRailWidget(tray: tray),
     );

@@ -108,7 +108,7 @@ class KitchenRushController extends ChangeNotifier {
     final l0count = counts[0];
     const cols = 6;
     final rows = (l0count / cols).ceil();
-    final cellW = (boardWidth - tileSize) / (cols > 1 ? cols - 1 : 1);
+    const cellW = (boardWidth - tileSize) / (cols - 1);
     final cellH = (boardHeight - tileSize) / (rows > 1 ? rows - 1 : 1);
     final idxs = List<int>.generate(cols * rows, (i) => i)..shuffle(_rng);
     final l0 = <Offset>[];

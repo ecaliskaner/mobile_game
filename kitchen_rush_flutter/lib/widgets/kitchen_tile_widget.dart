@@ -73,7 +73,7 @@ class KitchenTileWidget extends StatelessWidget {
                   ),
                   border: Border.all(color: ring, width: 2),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.28), blurRadius: 6, offset: const Offset(0, 3)),
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.28), blurRadius: 6, offset: const Offset(0, 3)),
                   ],
                 ),
               ),
@@ -85,7 +85,7 @@ class KitchenTileWidget extends StatelessWidget {
                 ClipOval(
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 1.4, sigmaY: 1.4),
-                    child: Container(color: Colors.white.withOpacity(0.12)),
+                    child: Container(color: Colors.white.withValues(alpha: 0.12)),
                   ),
                 ),
             ],

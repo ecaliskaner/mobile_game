@@ -42,7 +42,7 @@ class ToolbarGemButton extends StatelessWidget {
                     shape: BoxShape.circle,
                     gradient: RadialGradient(colors: [light, base, dark], stops: const [0, 0.55, 1]),
                     border: Border.all(color: const Color(0xFFF0B429), width: 3),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.35), blurRadius: 8, offset: const Offset(0, 5))],
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 8, offset: const Offset(0, 5))],
                   ),
                   alignment: Alignment.center,
                   child: Icon(icon, color: Colors.white, size: 24),

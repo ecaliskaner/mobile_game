@@ -26,7 +26,7 @@ class TargetSignWidget extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFF6B431E), width: 2),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         children: [

@@ -26,7 +26,7 @@ class TomatoPainter extends CustomPainter {
       ..close();
     canvas.drawPath(path, leaf);
 
-    final highlight = Paint()..color = Colors.white.withOpacity(0.32);
+    final highlight = Paint()..color = Colors.white.withValues(alpha: 0.32);
     canvas.drawOval(
       Rect.fromCenter(center: Offset(w * 0.38, h * 0.44), width: w * 0.22, height: h * 0.14),
       highlight,
@@ -51,7 +51,7 @@ class OnionPainter extends CustomPainter {
     canvas.drawOval(Rect.fromLTWH(w * 0.1, h * 0.1, w * 0.8, h * 0.82), body);
 
     final line = Paint()
-      ..color = Colors.white.withOpacity(0.3)
+      ..color = Colors.white.withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     canvas.drawArc(Rect.fromLTWH(w * 0.22, h * 0.12, w * 0.3, h * 0.78), -1.4, 2.6, false, line);
@@ -82,7 +82,7 @@ class GarlicPainter extends CustomPainter {
     canvas.drawOval(Rect.fromLTWH(w * 0.12, h * 0.12, w * 0.76, h * 0.76), body);
 
     final line = Paint()
-      ..color = const Color(0xFFB89F6E).withOpacity(0.5)
+      ..color = const Color(0xFFB89F6E).withValues(alpha: 0.5)
       ..strokeWidth = 1;
     canvas.drawLine(Offset(w * 0.5, h * 0.12), Offset(w * 0.5, h * 0.88), line);
     canvas.drawLine(Offset(w * 0.32, h * 0.18), Offset(w * 0.32, h * 0.82), line);
@@ -130,7 +130,7 @@ class PepperPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(Offset(w * 0.32, h * 0.28), Offset(w * 0.26, h * 0.12), stem);
 
-    final highlight = Paint()..color = Colors.white.withOpacity(0.26);
+    final highlight = Paint()..color = Colors.white.withValues(alpha: 0.26);
     canvas.drawOval(
       Rect.fromCenter(center: Offset(w * 0.42, h * 0.42), width: w * 0.16, height: h * 0.24),
       highlight,

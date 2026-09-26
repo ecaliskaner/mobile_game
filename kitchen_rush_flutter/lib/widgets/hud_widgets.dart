@@ -19,7 +19,7 @@ class ChefBadge extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFC1854A), width: 2),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.35), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Row(
         children: [
@@ -50,7 +50,7 @@ class ChefBadge extends StatelessWidget {
                   borderRadius: BorderRadius.circular(5),
                   child: Container(
                     height: 7,
-                    color: Colors.black.withOpacity(0.35),
+                    color: Colors.black.withValues(alpha: 0.35),
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: FractionallySizedBox(
