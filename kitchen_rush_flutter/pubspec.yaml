@@ -1,0 +1,21 @@
+name: kitchen_rush
+description: "Mutfak Telaşı - katmanlı eşleştirme bulmacası (mutfak konsepti), Flutter/Material 3 + Lucide ikonlarıyla."
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  lucide_icons_flutter: ^3.0.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  fake_async: ^1.3.0
+
+flutter:
+  uses-material-design: true
